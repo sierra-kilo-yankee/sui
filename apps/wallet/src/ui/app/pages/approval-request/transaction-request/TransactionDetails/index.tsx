@@ -7,7 +7,7 @@ import { type SuiAddress, type TransactionBlock } from '@mysten/sui.js';
 import { SummaryCard } from '../SummaryCard';
 import { Command } from './Command';
 import { Input } from './Input';
-import LoadingIndicator from '_src/ui/app/components/loading/LoadingIndicator';
+import Loading from '_src/ui/app/components/loading';
 import { useTransactionData } from '_src/ui/app/hooks';
 
 interface Props {
@@ -23,7 +23,10 @@ const Tab = (props: TabProps<'div'>) => (
 );
 
 export function TransactionDetails({ sender, transaction }: Props) {
-    const { data: transactionData } = useTransactionData(sender, transaction);
+    const { data: transactionData, isLoading } = useTransactionData(
+        sender,
+        transaction
+    );
 
     if (
         transactionData?.transactions.length === 0 &&
@@ -34,46 +37,51 @@ export function TransactionDetails({ sender, transaction }: Props) {
 
     return (
         <SummaryCard header="Transaction Details" initialExpanded>
-            {transactionData ? (
-                <div>
-                    <HeadlessTab.Group>
-                        <HeadlessTab.List className="flex gap-6 border-0 border-b border-solid border-gray-45 mb-6">
-                            {!!transactionData.transactions.length && (
-                                <Tab>Transactions</Tab>
-                            )}
-                            {!!transactionData.inputs.length && (
-                                <Tab>Inputs</Tab>
-                            )}
-                        </HeadlessTab.List>
-                        <HeadlessTab.Panels>
-                            {!!transactionData.transactions.length && (
-                                <HeadlessTab.Panel className="flex flex-col gap-6">
-                                    {/* TODO: Rename components: */}
-                                    {transactionData.transactions.map(
-                                        (command, index) => (
-                                            <Command
-                                                key={index}
-                                                command={command}
-                                            />
-                                        )
-                                    )}
-                                </HeadlessTab.Panel>
-                            )}
-                            {!!transactionData.inputs.length && (
-                                <HeadlessTab.Panel className="flex flex-col gap-2">
-                                    {transactionData.inputs.map(
-                                        (input, index) => (
-                                            <Input key={index} input={input} />
-                                        )
-                                    )}
-                                </HeadlessTab.Panel>
-                            )}
-                        </HeadlessTab.Panels>
-                    </HeadlessTab.Group>
-                </div>
-            ) : (
-                <LoadingIndicator />
-            )}
+            <Loading loading={isLoading}>
+                {transactionData ? (
+                    <div>
+                        <HeadlessTab.Group>
+                            <HeadlessTab.List className="flex gap-6 border-0 border-b border-solid border-gray-45 mb-6">
+                                {!!transactionData.transactions.length && (
+                                    <Tab>Transactions</Tab>
+                                )}
+                                {!!transactionData.inputs.length && (
+                                    <Tab>Inputs</Tab>
+                                )}
+                            </HeadlessTab.List>
+                            <HeadlessTab.Panels>
+                                {!!transactionData.transactions.length && (
+                                    <HeadlessTab.Panel className="flex flex-col gap-6">
+                                        {/* TODO: Rename components: */}
+                                        {transactionData.transactions.map(
+                                            (command, index) => (
+                                                <Command
+                                                    key={index}
+                                                    command={command}
+                                                />
+                                            )
+                                        )}
+                                    </HeadlessTab.Panel>
+                                )}
+                                {!!transactionData.inputs.length && (
+                                    <HeadlessTab.Panel className="flex flex-col gap-2">
+                                        {transactionData.inputs.map(
+                                            (input, index) => (
+                                                <Input
+                                                    key={index}
+                                                    input={input}
+                                                />
+                                            )
+                                        )}
+                                    </HeadlessTab.Panel>
+                                )}
+                            </HeadlessTab.Panels>
+                        </HeadlessTab.Group>
+                    </div>
+                ) : (
+                    '-'
+                )}
+            </Loading>
         </SummaryCard>
     );
 }

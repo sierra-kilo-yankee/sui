@@ -9,6 +9,7 @@ import {
 
 import { DescriptionItem, DescriptionList } from './DescriptionList';
 import { SummaryCard } from './SummaryCard';
+import Loading from '_src/ui/app/components/loading';
 import { useTransactionData, useTransactionGasBudget } from '_src/ui/app/hooks';
 import { GAS_SYMBOL } from '_src/ui/app/redux/slices/sui-objects/Coin';
 
@@ -19,7 +20,10 @@ interface Props {
 
 export function GasFees({ sender, transaction }: Props) {
     const { data: transactionData } = useTransactionData(sender, transaction);
-    const { data: gasBudget } = useTransactionGasBudget(sender, transaction);
+    const { data: gasBudget, isLoading } = useTransactionGasBudget(
+        sender,
+        transaction
+    );
 
     const isSponsored =
         transactionData?.gasConfig.owner &&
@@ -39,13 +43,15 @@ export function GasFees({ sender, transaction }: Props) {
         >
             <DescriptionList>
                 <DescriptionItem title="You Pay">
-                    {isSponsored ? 0 : gasBudget || '-'} {GAS_SYMBOL}
+                    <Loading loading={isLoading}>
+                        {isSponsored ? 0 : gasBudget || '-'}
+                        {isSponsored || gasBudget ? GAS_SYMBOL : null}
+                    </Loading>
                 </DescriptionItem>
-
                 {isSponsored && (
                     <>
                         <DescriptionItem title="Sponsor Pays">
-                            {gasBudget || '-'} {GAS_SYMBOL}
+                            {gasBudget ? `${gasBudget} ${GAS_SYMBOL}` : '-'}
                         </DescriptionItem>
                         <DescriptionItem title="Sponsor">
                             {formatAddress(transactionData!.gasConfig.owner!)}
