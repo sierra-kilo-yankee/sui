@@ -21,7 +21,7 @@ use test_utils::transaction::parse_package_ref;
 // for running the benchmark
 pub const MAX_GAS_FOR_TESTING: u64 = 1_000_000_000;
 
-pub type UpdatedAndNewlyMintedGasCoins = (Gas, Gas, Vec<Gas>);
+pub type UpdatedAndNewlyMintedGasCoins = Vec<Gas>;
 
 pub fn get_ed25519_keypair_from_keystore(
     keystore_path: PathBuf,
@@ -49,7 +49,7 @@ pub fn make_pay_tx(
         addresses,
         split_amounts,
         gas,
-        100_000_000,
+        50_000_000 * gas_price.unwrap_or(DUMMY_GAS_PRICE),
         gas_price.unwrap_or(DUMMY_GAS_PRICE),
     )?;
     Ok(to_sender_signed_transaction(pay, keypair))
