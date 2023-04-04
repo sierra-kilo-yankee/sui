@@ -111,7 +111,7 @@ impl WorkloadBuilder<dyn Payload> for SharedCounterWorkloadBuilder {
         // Gas coin for publishing package
         let (address, keypair) = get_key_pair();
         configs.push(GasCoinConfig {
-            amount: MAX_GAS_FOR_TESTING,
+            amount: MAX_GAS_FOR_TESTING * 1000,
             address,
             keypair: Arc::new(keypair),
         });
@@ -120,7 +120,7 @@ impl WorkloadBuilder<dyn Payload> for SharedCounterWorkloadBuilder {
         for _i in 0..self.num_counters {
             let (address, keypair) = get_key_pair();
             configs.push(GasCoinConfig {
-                amount: MAX_GAS_FOR_TESTING,
+                amount: MAX_GAS_FOR_TESTING * 1000,
                 address,
                 keypair: Arc::new(keypair),
             });
@@ -133,7 +133,7 @@ impl WorkloadBuilder<dyn Payload> for SharedCounterWorkloadBuilder {
         for _i in 0..self.num_payloads {
             let (address, keypair) = get_key_pair();
             configs.push(GasCoinConfig {
-                amount: MAX_GAS_FOR_TESTING,
+                amount: MAX_GAS_FOR_TESTING * 1000,
                 address,
                 keypair: Arc::new(keypair),
             });

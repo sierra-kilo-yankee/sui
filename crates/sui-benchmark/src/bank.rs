@@ -3,7 +3,7 @@
 
 use crate::util::{make_pay_tx, UpdatedAndNewlyMintedGasCoins};
 use crate::workloads::payload::Payload;
-use crate::workloads::workload::{Workload, WorkloadBuilder};
+use crate::workloads::workload::{Workload, WorkloadBuilder, MAX_GAS_FOR_TESTING};
 use crate::workloads::{Gas, GasCoinConfig};
 use crate::ValidatorProxy;
 use anyhow::{Error, Result};
@@ -117,7 +117,7 @@ impl BenchmarkBank {
                 CallArg::Object(ObjectArg::ImmOrOwnedObject(pay_coin.0)),
                 CallArg::Pure(bcs::to_bytes(&split_amounts).unwrap()),
             ],
-            50_000_000 * gas_price,
+            MAX_GAS_FOR_TESTING * gas_price,
             gas_price,
         )?;
         let verified_tx = to_sender_signed_transaction(split_coin, keypair);
@@ -133,14 +133,15 @@ impl BenchmarkBank {
         // TODO: Instead of splitting the coin and then using pay tx to transfer it to recipients,
         // we can do both in one tx with pay_sui which will split the coin out for us before
         // transferring it to recipients
-        println!(
-            "Splitting {} coin(s) into {} X {} coin(s)",
-            self.pay_coins.len(),
-            split_amounts[0],
-            split_amounts.len()
-        );
         let mut updated_pay_coins = Vec::new();
+        let mut transferred_coins: Result<Vec<Gas>> = Err(Error::msg("Failed to split coin"));
         for (idx, pay_coin) in self.pay_coins.iter().enumerate() {
+            println!(
+                "From {} coin(s), splitting coin#{idx} into {} X {} coin(s)",
+                self.pay_coins.len(),
+                split_amounts[0],
+                split_amounts.len()
+            );
             let verified_tx = self.make_split_coin_tx(
                 split_amounts.clone(),
                 Some(gas_price),
@@ -150,25 +151,36 @@ impl BenchmarkBank {
             let effects = self
                 .proxy
                 .execute_transaction_block(verified_tx.into())
-                .await?;
-            if !effects.is_ok() {
-                error!("Failed to split coin: {:?}", effects);
-                // TODO: check effects and make decision on what coin to use
-                // based on error.
-                let updated_coin = effects
-                    .mutated()
-                    .into_iter()
-                    .find(|(k, _)| k.0 == pay_coin.0 .0)
-                    .ok_or("Input gas missing in the effects")
-                    .map_err(Error::msg)?;
+                .await;
 
-                updated_pay_coins.push((
-                    updated_coin.0,
-                    updated_coin.1.get_owner_address()?,
-                    self.primary_gas.2.clone(),
-                ));
-                continue;
-            }
+            let effects = match effects {
+                Ok(effects) => {
+                    if !effects.is_ok() {
+                        error!("Failed to split coin: {:?}", effects);
+                        // TODO: check effects and make decision on what coin to use
+                        // based on error.
+                        let updated_coin = effects
+                            .mutated()
+                            .into_iter()
+                            .find(|(k, _)| k.0 == pay_coin.0 .0)
+                            .ok_or("Input gas missing in the effects")
+                            .map_err(Error::msg)?;
+
+                        updated_pay_coins.push((
+                            updated_coin.0,
+                            updated_coin.1.get_owner_address()?,
+                            self.primary_gas.2.clone(),
+                        ));
+                        continue;
+                    }
+                    effects
+                }
+                Err(e) => {
+                    error!("Failed to split coin: {:?}", e);
+                    continue;
+                }
+            };
+
             let updated_gas = effects
                 .mutated()
                 .into_iter()
@@ -210,7 +222,7 @@ impl BenchmarkBank {
                 .iter()
                 .map(|c| (c.address, c.keypair.clone()))
                 .collect();
-            let transferred_coins: Result<Vec<Gas>> = effects
+            transferred_coins = effects
                 .created()
                 .into_iter()
                 .map(|c| {
@@ -239,10 +251,9 @@ impl BenchmarkBank {
             let remaining_pay_coins = right.iter().cloned().collect::<Vec<_>>();
             self.pay_coins = updated_pay_coins;
             self.pay_coins.extend(remaining_pay_coins);
-
-            return Ok(transferred_coins?);
+            break;
         }
 
-        Err(Error::msg("Failed to split coin"))
+        Ok(transferred_coins?)
     }
 }
