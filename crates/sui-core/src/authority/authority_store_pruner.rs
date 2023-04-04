@@ -21,7 +21,7 @@ use sui_types::{
 };
 use tokio::sync::oneshot::{self, Sender};
 use tokio::time::Instant;
-use tracing::log::{debug, error};
+use tracing::log::{debug, error, warn};
 use typed_store::Map;
 
 use super::authority_store_tables::AuthorityPerpetualTables;
@@ -71,6 +71,7 @@ impl AuthorityStorePruner {
         deletion_method: DeletionMethod,
         metrics: Arc<AuthorityStorePruningMetrics>,
     ) -> anyhow::Result<()> {
+        warn!("pruning: {:?}", checkpoint_number);
         let _scope = monitored_scope("ObjectsLivePruner");
         let mut wb = perpetual_db.objects.batch();
 
@@ -113,6 +114,10 @@ impl AuthorityStorePruner {
                 for (object_id, (min_version, max_version)) in updates {
                     let start_range = ObjectKey(object_id, min_version);
                     let end_range = ObjectKey(object_id, (max_version.value() + 1).into());
+                    warn!(
+                        "object pruned: {:?}[{:?},{:?}]",
+                        object_id, min_version, max_version
+                    );
                     wb.delete_range(&perpetual_db.objects, &start_range, &end_range)?;
                 }
             }
