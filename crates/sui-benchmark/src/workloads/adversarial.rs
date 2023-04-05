@@ -32,6 +32,7 @@ use sui_types::{base_types::ObjectID, object::Owner};
 use sui_types::{base_types::SuiAddress, crypto::get_key_pair, messages::VerifiedTransaction};
 use sui_types::{messages::TransactionData, utils::to_sender_signed_transaction};
 use test_utils::messages::create_publish_move_package_transaction_with_budget;
+use tracing::error;
 /// Number of vectors to create in LargeTransientRuntimeVectors workload
 const NUM_VECTORS: u64 = 1_000;
 
@@ -346,6 +347,7 @@ impl AdversarialTestPayload {
 pub struct AdversarialWorkloadBuilder {
     num_payloads: u64,
     adversarial_payload_cfg: AdversarialPayloadCfg,
+    gas_price: u64,
 }
 
 #[async_trait]
@@ -354,7 +356,7 @@ impl WorkloadBuilder<dyn Payload> for AdversarialWorkloadBuilder {
         // Gas coin for publishing adversarial package
         let (address, keypair) = get_key_pair();
         vec![GasCoinConfig {
-            amount: MAX_GAS_FOR_TESTING,
+            amount: MAX_GAS_FOR_TESTING * self.gas_price,
             address,
             keypair: Arc::new(keypair),
         }]
@@ -366,7 +368,7 @@ impl WorkloadBuilder<dyn Payload> for AdversarialWorkloadBuilder {
         for _i in 0..self.num_payloads {
             let (address, keypair) = get_key_pair();
             configs.push(GasCoinConfig {
-                amount: MAX_GAS_FOR_TESTING,
+                amount: MAX_GAS_FOR_TESTING * self.gas_price,
                 address,
                 keypair: Arc::new(keypair),
             });
@@ -407,6 +409,7 @@ impl AdversarialWorkloadBuilder {
         num_workers: u64,
         in_flight_ratio: u64,
         adversarial_payload_cfg: AdversarialPayloadCfg,
+        gas_price: u64,
     ) -> Option<WorkloadBuilderInfo> {
         let target_qps = (workload_weight * target_qps as f32) as u64;
         let num_workers = (workload_weight * num_workers as f32).ceil() as u64;
@@ -423,6 +426,7 @@ impl AdversarialWorkloadBuilder {
                 AdversarialWorkloadBuilder {
                     num_payloads: max_ops,
                     adversarial_payload_cfg,
+                    gas_price,
                 },
             ));
             let builder_info = WorkloadBuilderInfo {
@@ -521,10 +525,18 @@ impl Workload<dyn Payload> for AdversarialWorkload {
             reference_gas_price,
         );
 
-        let effects = proxy
-            .execute_transaction_block(transaction.into())
-            .await
-            .unwrap();
+        let effects = match proxy.execute_transaction_block(transaction.into()).await {
+            Ok(effects) => {
+                if !effects.is_ok() {
+                    error!("Failed to create adversarial workload: {:?}", effects);
+                }
+                effects
+            }
+            Err(e) => {
+                error!("Failed to create adversarial workload: {:?}", e);
+                return;
+            }
+        };
 
         let created = effects.created();
         assert_eq!(created.len() as u64, num_shared_objs);

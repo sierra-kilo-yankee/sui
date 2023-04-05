@@ -83,6 +83,7 @@ impl std::fmt::Display for TransferObjectTestPayload {
 pub struct TransferObjectWorkloadBuilder {
     num_transfer_accounts: u64,
     num_payloads: u64,
+    gas_price: u64,
 }
 
 impl TransferObjectWorkloadBuilder {
@@ -92,6 +93,7 @@ impl TransferObjectWorkloadBuilder {
         num_workers: u64,
         in_flight_ratio: u64,
         num_transfer_accounts: u64,
+        gas_price: u64,
     ) -> Option<WorkloadBuilderInfo> {
         let target_qps = (workload_weight * target_qps as f32) as u64;
         let num_workers = (workload_weight * num_workers as f32).ceil() as u64;
@@ -108,6 +110,7 @@ impl TransferObjectWorkloadBuilder {
                 TransferObjectWorkloadBuilder {
                     num_transfer_accounts,
                     num_payloads: max_ops,
+                    gas_price,
                 },
             ));
             let builder_info = WorkloadBuilderInfo {
@@ -135,7 +138,7 @@ impl WorkloadBuilder<dyn Payload> for TransferObjectWorkloadBuilder {
             address_map.insert(address, cloned_keypair.clone());
             for _j in 0..self.num_payloads {
                 payload_configs.push(GasCoinConfig {
-                    amount: MAX_GAS_FOR_TESTING,
+                    amount: MAX_GAS_FOR_TESTING * self.gas_price,
                     address,
                     keypair: cloned_keypair.clone(),
                 });

@@ -64,6 +64,7 @@ impl Payload for SharedCounterTestPayload {
 pub struct SharedCounterWorkloadBuilder {
     num_counters: u64,
     num_payloads: u64,
+    gas_price: u64,
 }
 
 impl SharedCounterWorkloadBuilder {
@@ -73,6 +74,7 @@ impl SharedCounterWorkloadBuilder {
         num_workers: u64,
         in_flight_ratio: u64,
         shared_counter_hotness_factor: u32,
+        gas_price: u64,
     ) -> Option<WorkloadBuilderInfo> {
         let target_qps = (workload_weight * target_qps as f32) as u64;
         let num_workers = (workload_weight * num_workers as f32).ceil() as u64;
@@ -92,6 +94,7 @@ impl SharedCounterWorkloadBuilder {
                 SharedCounterWorkloadBuilder {
                     num_counters: num_shared_counters,
                     num_payloads: max_ops,
+                    gas_price,
                 },
             ));
             let builder_info = WorkloadBuilderInfo {
@@ -111,7 +114,7 @@ impl WorkloadBuilder<dyn Payload> for SharedCounterWorkloadBuilder {
         // Gas coin for publishing package
         let (address, keypair) = get_key_pair();
         configs.push(GasCoinConfig {
-            amount: MAX_GAS_FOR_TESTING * 1000,
+            amount: MAX_GAS_FOR_TESTING * self.gas_price,
             address,
             keypair: Arc::new(keypair),
         });
@@ -120,7 +123,7 @@ impl WorkloadBuilder<dyn Payload> for SharedCounterWorkloadBuilder {
         for _i in 0..self.num_counters {
             let (address, keypair) = get_key_pair();
             configs.push(GasCoinConfig {
-                amount: MAX_GAS_FOR_TESTING * 1000,
+                amount: MAX_GAS_FOR_TESTING * self.gas_price,
                 address,
                 keypair: Arc::new(keypair),
             });
@@ -133,7 +136,7 @@ impl WorkloadBuilder<dyn Payload> for SharedCounterWorkloadBuilder {
         for _i in 0..self.num_payloads {
             let (address, keypair) = get_key_pair();
             configs.push(GasCoinConfig {
-                amount: MAX_GAS_FOR_TESTING * 1000,
+                amount: MAX_GAS_FOR_TESTING * self.gas_price,
                 address,
                 keypair: Arc::new(keypair),
             });

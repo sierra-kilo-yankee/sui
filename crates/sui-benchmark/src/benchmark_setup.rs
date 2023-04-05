@@ -161,7 +161,7 @@ impl Env {
         Ok(BenchmarkSetup {
             server_handle: join_handle,
             shutdown_notifier: sender,
-            bank: BenchmarkBank::new(proxy.clone(), primary_gas, vec![pay_coin]),
+            bank: BenchmarkBank::new(proxy.clone(), primary_gas, vec![(0, pay_coin)]),
             proxies: vec![proxy],
         })
     }
@@ -301,9 +301,10 @@ impl Env {
             bail!("fullnode-rpc-url is required for remote run to get gas objects");
         }
         let fn_proxy = Arc::new(FullNodeProxy::from_url(&fullnode_rpc_urls[0]).await?);
-        let gas_objects = fn_proxy
+        let mut gas_objects = fn_proxy
             .get_owned_objects(primary_gas_owner_addr.into())
             .await?;
+        gas_objects.sort_by_key(|&(gas, _)| std::cmp::Reverse(gas));
 
         let (balance, primary_gas_obj) = gas_objects
             .iter()
@@ -344,12 +345,15 @@ impl Env {
             .map(|(balance, pay_coin)| {
                 pay_coins_total_balance += balance;
                 (
-                    pay_coin.compute_object_reference(),
-                    pay_coin
-                        .owner
-                        .get_owner_address()
-                        .expect("Failed to get owner address"),
-                    keypair.clone(),
+                    *balance,
+                    (
+                        pay_coin.compute_object_reference(),
+                        pay_coin
+                            .owner
+                            .get_owner_address()
+                            .expect("Failed to get owner address"),
+                        keypair.clone(),
+                    ),
                 )
             })
             .collect::<Vec<_>>();

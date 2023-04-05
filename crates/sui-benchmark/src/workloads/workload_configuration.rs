@@ -77,6 +77,7 @@ impl WorkloadConfiguration {
         system_state_observer: Arc<SystemStateObserver>,
         chunk_size: u64,
     ) -> Result<Vec<WorkloadInfo>> {
+        let reference_gas_price = system_state_observer.state.borrow().reference_gas_price;
         let total_weight = shared_counter_weight
             + transfer_object_weight
             + delegation_weight
@@ -89,6 +90,7 @@ impl WorkloadConfiguration {
             num_workers,
             in_flight_ratio,
             shared_counter_hotness_factor,
+            reference_gas_price,
         );
         workload_builders.push(shared_workload);
         let transfer_workload = TransferObjectWorkloadBuilder::from(
@@ -97,6 +99,7 @@ impl WorkloadConfiguration {
             num_workers,
             in_flight_ratio,
             num_transfer_accounts,
+            reference_gas_price,
         );
         workload_builders.push(transfer_workload);
         let delegation_workload = DelegationWorkloadBuilder::from(
@@ -104,6 +107,7 @@ impl WorkloadConfiguration {
             target_qps,
             num_workers,
             in_flight_ratio,
+            reference_gas_price,
         );
         workload_builders.push(delegation_workload);
         let batch_payment_workload = BatchPaymentWorkloadBuilder::from(
@@ -112,6 +116,7 @@ impl WorkloadConfiguration {
             num_workers,
             in_flight_ratio,
             batch_payment_size,
+            reference_gas_price,
         );
         workload_builders.push(batch_payment_workload);
         let adversarial_workload = AdversarialWorkloadBuilder::from(
@@ -120,6 +125,7 @@ impl WorkloadConfiguration {
             num_workers,
             in_flight_ratio,
             adversarial_cfg,
+            reference_gas_price,
         );
         workload_builders.push(adversarial_workload);
         let (workload_params, workload_builders): (Vec<_>, Vec<_>) = workload_builders
@@ -127,7 +133,6 @@ impl WorkloadConfiguration {
             .flatten()
             .map(|x| (x.workload_params, x.workload_builder))
             .unzip();
-        let reference_gas_price = system_state_observer.state.borrow().reference_gas_price;
         let mut workloads = bank
             .generate(workload_builders, reference_gas_price, chunk_size)
             .await?;

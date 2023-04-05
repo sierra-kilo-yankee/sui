@@ -78,6 +78,7 @@ impl Payload for DelegationTestPayload {
 
 #[derive(Debug)]
 pub struct DelegationWorkloadBuilder {
+    gas_price: u64,
     count: u64,
 }
 
@@ -87,6 +88,7 @@ impl DelegationWorkloadBuilder {
         target_qps: u64,
         num_workers: u64,
         in_flight_ratio: u64,
+        gas_price: u64,
     ) -> Option<WorkloadBuilderInfo> {
         let target_qps = (workload_weight * target_qps as f32) as u64;
         let num_workers = (workload_weight * num_workers as f32).ceil() as u64;
@@ -100,7 +102,10 @@ impl DelegationWorkloadBuilder {
                 max_ops,
             };
             let workload_builder = Box::<dyn WorkloadBuilder<dyn Payload>>::from(Box::new(
-                DelegationWorkloadBuilder { count: max_ops },
+                DelegationWorkloadBuilder {
+                    count: max_ops,
+                    gas_price,
+                },
             ));
             let builder_info = WorkloadBuilderInfo {
                 workload_params,
@@ -121,7 +126,7 @@ impl WorkloadBuilder<dyn Payload> for DelegationWorkloadBuilder {
             .map(|_| {
                 let (address, keypair) = get_key_pair();
                 GasCoinConfig {
-                    amount: MAX_GAS_FOR_TESTING,
+                    amount: MAX_GAS_FOR_TESTING * self.gas_price,
                     address,
                     keypair: Arc::new(keypair),
                 }

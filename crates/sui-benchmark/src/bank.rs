@@ -3,7 +3,7 @@
 
 use crate::util::{make_pay_tx, UpdatedAndNewlyMintedGasCoins};
 use crate::workloads::payload::Payload;
-use crate::workloads::workload::{Workload, WorkloadBuilder, MAX_GAS_FOR_TESTING};
+use crate::workloads::workload::{Workload, WorkloadBuilder, MAX_BUDGET_FOR_TESTING};
 use crate::workloads::{Gas, GasCoinConfig};
 use crate::ValidatorProxy;
 use anyhow::{Error, Result};
@@ -30,14 +30,14 @@ pub struct BenchmarkBank {
     // Gas to use for execution of gas generation transaction
     pub primary_gas: Gas,
     // Coin to use for splitting and generating small gas coins
-    pub pay_coins: Vec<Gas>,
+    pub pay_coins: Vec<(u64, Gas)>,
 }
 
 impl BenchmarkBank {
     pub fn new(
         proxy: Arc<dyn ValidatorProxy + Send + Sync>,
         primary_gas: Gas,
-        pay_coins: Vec<Gas>,
+        pay_coins: Vec<(u64, Gas)>,
     ) -> Self {
         BenchmarkBank {
             proxy,
@@ -117,7 +117,7 @@ impl BenchmarkBank {
                 CallArg::Object(ObjectArg::ImmOrOwnedObject(pay_coin.0)),
                 CallArg::Pure(bcs::to_bytes(&split_amounts).unwrap()),
             ],
-            MAX_GAS_FOR_TESTING * gas_price,
+            MAX_BUDGET_FOR_TESTING * gas_price,
             gas_price,
         )?;
         let verified_tx = to_sender_signed_transaction(split_coin, keypair);
@@ -135,10 +135,9 @@ impl BenchmarkBank {
         // transferring it to recipients
         let mut updated_pay_coins = Vec::new();
         let mut transferred_coins: Result<Vec<Gas>> = Err(Error::msg("Failed to split coin"));
-        for (idx, pay_coin) in self.pay_coins.iter().enumerate() {
+        for (idx, (balance, pay_coin)) in self.pay_coins.iter().enumerate() {
             println!(
-                "From {} coin(s), splitting coin#{idx} into {} X {} coin(s)",
-                self.pay_coins.len(),
+                "Splitting coin#{idx} with {balance} into {} X {} coin(s)",
                 split_amounts[0],
                 split_amounts.len()
             );
@@ -158,20 +157,52 @@ impl BenchmarkBank {
                     if !effects.is_ok() {
                         error!("Failed to split coin: {:?}", effects);
                         // TODO: check effects and make decision on what coin to use
-                        // based on error.
+                        // based on errors.
+                        let updated_gas = effects
+                            .mutated()
+                            .into_iter()
+                            .find(|(k, _)| k.0 == self.primary_gas.0 .0)
+                            .ok_or("Input gas missing in the effects")
+                            .map_err(Error::msg);
+
+                        match updated_gas {
+                            Ok(updated_gas) => {
+                                self.primary_gas = (
+                                    updated_gas.0,
+                                    updated_gas.1.get_owner_address()?,
+                                    self.primary_gas.2.clone(),
+                                );
+                            }
+                            Err(e) => {
+                                error!("Failed to get mutated gas: {:?}", e);
+                                continue;
+                            }
+                        };
+
                         let updated_coin = effects
                             .mutated()
                             .into_iter()
                             .find(|(k, _)| k.0 == pay_coin.0 .0)
-                            .ok_or("Input gas missing in the effects")
-                            .map_err(Error::msg)?;
+                            .ok_or("Pay coin missing in the effects")
+                            .map_err(Error::msg);
 
-                        updated_pay_coins.push((
-                            updated_coin.0,
-                            updated_coin.1.get_owner_address()?,
-                            self.primary_gas.2.clone(),
-                        ));
-                        continue;
+                        match updated_coin {
+                            Ok(updated_coin) => {
+                                updated_pay_coins.push((
+                                    0, // TODO: get actual balance
+                                    (
+                                        updated_coin.0,
+                                        updated_coin.1.get_owner_address()?,
+                                        self.primary_gas.2.clone(),
+                                    ),
+                                ));
+                                continue;
+                            }
+                            Err(e) => {
+                                error!("Failed to mutated pay coi: {:?}", e);
+                                continue;
+                            }
+                        };
                     }
                     effects
                 }
@@ -198,9 +229,12 @@ impl BenchmarkBank {
                 .map_err(Error::msg)?;
 
             updated_pay_coins.push((
-                updated_coin.0,
-                updated_coin.1.get_owner_address()?,
-                self.primary_gas.2.clone(),
+                0, // TODO: get actual balance
+                (
+                    updated_coin.0,
+                    updated_coin.1.get_owner_address()?,
+                    self.primary_gas.2.clone(),
+                ),
             ));
 
             let recipient_addresses: Vec<SuiAddress> =
