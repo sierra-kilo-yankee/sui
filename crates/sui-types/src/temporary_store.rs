@@ -979,11 +979,22 @@ impl<S: ObjectStore> TemporaryStore<S> {
         self.collect_storage_and_rebate(gas_status);
         if let Some(gas_object_id) = gas_object_id {
             if let Err(err) = gas_status.charge_storage_and_rebate() {
+                // we run out of gas charging storage, reset and try charging for storage again
+                // input objects are touched and they carry storage charges
                 self.reset(gas, gas_status);
-                gas_status.adjust_computation_on_out_of_gas();
                 self.ensure_gas_and_input_mutated(Some(gas_object_id));
-                self.collect_rebate(gas_status);
-                if execution_result.is_ok() {
+                self.collect_storage_and_rebate(gas_status);
+                if let Err(err) = gas_status.charge_storage_and_rebate() {
+                    // we run out of gas attempting to charge for the input objects exclusively,
+                    // deal with this edge case
+                    self.reset(gas, gas_status);
+                    gas_status.adjust_computation_on_out_of_gas();
+                    self.ensure_gas_and_input_mutated(Some(gas_object_id));
+                    self.collect_rebate(gas_status);
+                    if execution_result.is_ok() {
+                        *execution_result = Err(err);
+                    }
+                } else if execution_result.is_ok() {
                     *execution_result = Err(err);
                 }
             }

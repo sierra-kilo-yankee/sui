@@ -359,14 +359,10 @@ async fn test_publish_gas() -> anyhow::Result<()> {
 
     assert_eq!(err, ExecutionFailureStatus::InsufficientGas);
 
-    // Make sure that we are not charging storage cost at failure.
-    assert_eq!(gas_cost.storage_cost, 0);
-    assert_eq!(gas_cost.storage_rebate, 0);
-    // Upon OOG failure, we should charge the whole budget
-    assert_eq!(gas_cost.gas_used(), budget);
+    assert!(gas_cost.gas_used() > 0);
 
     let gas_object = authority_state.get_object(&gas_object_id).await?.unwrap();
-    let expected_gas_balance = expected_gas_balance - gas_cost.gas_used();
+    let expected_gas_balance = expected_gas_balance - gas_cost.net_gas_usage() as u64;
     assert_eq!(
         GasCoin::try_from(&gas_object)?.value(),
         expected_gas_balance,
