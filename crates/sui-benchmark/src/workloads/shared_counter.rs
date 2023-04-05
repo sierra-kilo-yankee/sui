@@ -196,7 +196,7 @@ impl Workload<dyn Payload> for SharedCounterWorkload {
                 self.basics_package_id.unwrap(),
                 *sender,
                 keypair,
-                Some(gas_price),
+                gas_price,
             );
             let proxy_ref = proxy.clone();
             futures.push(async move {

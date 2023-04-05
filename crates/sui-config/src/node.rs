@@ -432,8 +432,10 @@ pub struct ValidatorInfo {
 }
 
 impl ValidatorInfo {
-    /// Default gas price of 1000 Mist
-    pub const DEFAULT_GAS_PRICE: u64 = 1000;
+    // FIXME to 1000
+    // And we don't need the other one in sui-config/src
+    /// Default gas price of 10 Mist
+    pub const DEFAULT_GAS_PRICE: u64 = 10;
 
     /// Default commission rate of 2%
     pub const DEFAULT_COMMISSION_RATE: u64 = 200;

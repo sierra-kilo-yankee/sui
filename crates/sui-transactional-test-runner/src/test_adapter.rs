@@ -329,12 +329,7 @@ impl<'a> MoveTestAdapter<'a> for SuiTestAdapter<'a> {
                 builder.publish_immutable(vec![module_bytes], dependencies);
             };
             let pt = builder.finish();
-            TransactionData::new_programmable_with_dummy_gas_price(
-                sender,
-                vec![gas],
-                pt,
-                gas_budget,
-            )
+            TransactionData::new_programmable(sender, vec![gas], pt, gas_budget, 1)
         };
         let transaction = self.sign_txn(sender, data);
         let summary = self.execute_txn(transaction, gas_budget)?;
@@ -415,12 +410,7 @@ impl<'a> MoveTestAdapter<'a> for SuiTestAdapter<'a> {
                 arguments,
             ));
             let pt = builder.finish();
-            TransactionData::new_programmable_with_dummy_gas_price(
-                sender,
-                vec![gas],
-                pt,
-                gas_budget,
-            )
+            TransactionData::new_programmable(sender, vec![gas], pt, gas_budget, 1)
         };
         let transaction = self.sign_txn(sender, data);
         let summary = self.execute_txn(transaction, gas_budget)?;
@@ -540,12 +530,7 @@ impl<'a> MoveTestAdapter<'a> for SuiTestAdapter<'a> {
                         rec_arg,
                     ));
                     let pt = builder.finish();
-                    TransactionData::new_programmable_with_dummy_gas_price(
-                        sender,
-                        vec![gas],
-                        pt,
-                        gas_budget,
-                    )
+                    TransactionData::new_programmable(sender, vec![gas], pt, gas_budget, 1)
                 });
                 let summary = self.execute_txn(transaction, gas_budget)?;
                 let output = self.object_summary_output(&summary, false, view_gas_used);
@@ -584,11 +569,12 @@ impl<'a> MoveTestAdapter<'a> for SuiTestAdapter<'a> {
                     .collect::<anyhow::Result<Vec<Command>>>()?;
                 let gas_budget = gas_budget.unwrap_or(DEFAULT_GAS_BUDGET);
                 let transaction = self.sign_txn(sender, |sender, gas| {
-                    TransactionData::new_programmable_with_dummy_gas_price(
+                    TransactionData::new_programmable(
                         sender,
                         vec![gas],
                         ProgrammableTransaction { inputs, commands },
                         gas_budget,
+                        1,
                     )
                 });
                 let summary = self.execute_txn(transaction, gas_budget)?;

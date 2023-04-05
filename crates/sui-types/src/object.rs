@@ -31,6 +31,7 @@ use crate::{
 };
 use sui_protocol_config::ProtocolConfig;
 
+// FIXME
 pub const MAX_GAS_BUDGET_FOR_TESTING: u64 = 5_000_000_000;
 pub const GAS_VALUE_FOR_TESTING: u64 = 300_000_000_000_000;
 pub const OBJECT_START_VERSION: SequenceNumber = SequenceNumber::from_u64(1);
@@ -907,6 +908,7 @@ pub fn generate_max_test_gas_objects_with_owner(count: u64, owner: SuiAddress) -
         .collect()
 }
 
+// FIXME
 /// Make a few test gas objects with specific owners.
 pub fn generate_test_gas_objects_with_owner_list<O>(owners: O) -> Vec<Object>
 where

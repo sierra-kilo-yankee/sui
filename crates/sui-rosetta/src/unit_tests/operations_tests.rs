@@ -4,7 +4,7 @@
 use move_core_types::value::MoveTypeLayout;
 use sui_json_rpc_types::SuiCallArg;
 use sui_types::base_types::{ObjectDigest, ObjectID, SequenceNumber, SuiAddress};
-use sui_types::messages::{CallArg, TransactionData};
+use sui_types::messages::{CallArg, TransactionData, GAS_UNIT_FOR_TRANSFER};
 use sui_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 
 use crate::operations::Operations;
@@ -27,7 +27,14 @@ async fn test_operation_data_parsing() -> Result<(), anyhow::Error> {
             .unwrap();
         builder.finish()
     };
-    let data = TransactionData::new_programmable_with_dummy_gas_price(sender, vec![gas], pt, 1000);
+    let gas_price = 10;
+    let data = TransactionData::new_programmable(
+        sender,
+        vec![gas],
+        pt,
+        GAS_UNIT_FOR_TRANSFER * gas_price,
+        gas_price,
+    );
 
     let ops: Operations = data.clone().try_into()?;
     let metadata = ConstructionMetadata {

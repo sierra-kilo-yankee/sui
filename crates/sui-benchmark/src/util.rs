@@ -9,7 +9,9 @@ use crate::ValidatorProxy;
 use std::path::PathBuf;
 use std::sync::Arc;
 use sui_types::base_types::ObjectRef;
-use sui_types::messages::{TransactionData, VerifiedTransaction, DUMMY_GAS_PRICE};
+use sui_types::messages::{
+    TransactionData, VerifiedTransaction, DUMMY_GAS_PRICE, GAS_UNIT_FOR_PUBLISH,
+};
 use sui_types::utils::to_sender_signed_transaction;
 
 use crate::workloads::Gas;
@@ -43,6 +45,7 @@ pub fn make_pay_tx(
     keypair: &AccountKeyPair,
     gas_price: Option<u64>,
 ) -> Result<VerifiedTransaction> {
+    // FIXME
     let pay = TransactionData::new_pay(
         sender,
         input_coins,
@@ -64,8 +67,14 @@ pub async fn publish_basics_package(
 ) -> ObjectRef {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("../../sui_programmability/examples/basics");
-    let transaction =
-        create_publish_move_package_transaction(gas, path, sender, keypair, Some(gas_price));
+    let transaction = create_publish_move_package_transaction(
+        gas,
+        path,
+        sender,
+        keypair,
+        gas_price * GAS_UNIT_FOR_PUBLISH,
+        gas_price,
+    );
     let effects = proxy
         .execute_transaction_block(transaction.into())
         .await

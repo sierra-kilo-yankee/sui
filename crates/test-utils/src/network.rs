@@ -25,7 +25,6 @@ use sui_config::genesis_config::GenesisConfig;
 use sui_config::node::DBCheckpointConfig;
 use sui_config::{Config, SUI_CLIENT_CONFIG, SUI_NETWORK_CONFIG};
 use sui_config::{FullnodeConfigBuilder, NodeConfig, PersistedConfig, SUI_KEYSTORE_FILENAME};
-use sui_core::test_utils::MAX_GAS;
 use sui_framework::{SuiSystem, SystemPackage};
 use sui_json_rpc_types::{SuiTransactionBlockResponse, SuiTransactionBlockResponseOptions};
 use sui_keys::keystore::{AccountKeystore, FileBasedKeystore, Keystore};
@@ -147,6 +146,14 @@ impl TestCluster {
         RandomNodeRestarter::new(self.clone())
     }
 
+    pub async fn get_reference_gas_price(&self) -> u64 {
+        self.sui_client()
+            .governance_api()
+            .get_reference_gas_price()
+            .await
+            .expect("failed to get reference gas price")
+    }
+
     /// Wait for thet network to transition to the next or a specific epoch.
     /// To detect whether the network has reached such state, we use the fullnode as the
     /// source of truth, since a fullnode only does epoch transition when the network has
@@ -179,9 +186,11 @@ impl TestCluster {
         validator_address: SuiAddress,
         sender: SuiAddress,
         sender_keypair: &AccountKeyPair,
+        gas_budget: u64,
+        gas_price: u64,
     ) -> SuiRpcResult<SuiTransactionBlockResponse> {
         let objects = get_sui_gas_object_with_wallet_context(&self.wallet, &sender).await;
-        let stake_tx_data = TransactionData::new_move_call_with_dummy_gas_price(
+        let stake_tx_data = TransactionData::new_move_call(
             sender,
             SuiSystem::ID,
             ident_str!("sui_system").to_owned(),
@@ -197,7 +206,8 @@ impl TestCluster {
                 CallArg::Object(ObjectArg::ImmOrOwnedObject(objects[1].1)),
                 CallArg::Pure(bcs::to_bytes(&validator_address).unwrap()),
             ],
-            MAX_GAS,
+            gas_budget,
+            gas_price,
         )
         .unwrap();
         let transaction = to_sender_signed_transaction(stake_tx_data, sender_keypair);

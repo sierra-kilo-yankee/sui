@@ -11,7 +11,6 @@ use sui_core::test_utils::dummy_transaction_effects;
 use sui_framework_build::compiled_package::BuildConfig;
 use sui_json_rpc_types::SuiObjectResponse;
 use sui_keys::keystore::AccountKeystore;
-use sui_keys::keystore::Keystore;
 use sui_types::base_types::ObjectRef;
 use sui_types::base_types::SuiAddress;
 use sui_types::base_types::{ObjectID, SequenceNumber};
@@ -22,14 +21,14 @@ use sui_types::crypto::{
 };
 use sui_types::gas_coin::GasCoin;
 use sui_types::messages::SignedTransactionEffects;
+use sui_types::messages::GAS_UNIT_FOR_GENERIC;
+use sui_types::messages::GAS_UNIT_FOR_TRANSFER;
 use sui_types::messages::{CallArg, DUMMY_GAS_PRICE};
 use sui_types::messages::{
     CertifiedTransaction, ObjectArg, TransactionData, VerifiedCertificate,
     VerifiedSignedTransaction, VerifiedTransaction,
 };
-use sui_types::object::{
-    generate_test_gas_objects, generate_test_gas_objects_with_owner_list, Object,
-};
+use sui_types::object::{generate_test_gas_objects, Object};
 use sui_types::parse_sui_struct_tag;
 use sui_types::sui_system_state::SUI_SYSTEM_MODULE_NAME;
 use sui_types::utils::to_sender_signed_transaction;
@@ -39,6 +38,7 @@ use sui_types::{
 };
 
 /// The maximum gas per transaction.
+/// FIXME
 pub const MAX_GAS: u64 = 5_000_000_000;
 pub const MAX_DELEGATION_GAS: u64 = MAX_GAS - 50_000;
 
@@ -150,45 +150,8 @@ pub async fn make_transactions_with_wallet_context(
     let recipient = get_key_pair::<AuthorityKeyPair>().0;
     let accounts_and_objs = get_account_and_gas_objects(context).await;
     let mut res = Vec::with_capacity(max_txn_num);
-    for (address, objs) in &accounts_and_objs {
-        for obj in objs {
-            if res.len() >= max_txn_num {
-                return res;
-            }
-            let data = TransactionData::new_transfer_sui_with_dummy_gas_price(
-                recipient,
-                *address,
-                Some(2),
-                obj.clone()
-                    .into_object()
-                    .expect("Gas coin could not be converted to object ref.")
-                    .object_ref(),
-                MAX_GAS,
-            );
-            let tx = to_sender_signed_transaction(
-                data,
-                context.config.keystore.get_key(address).unwrap(),
-            );
-            res.push(tx);
-        }
-    }
-    res
-}
 
-pub async fn make_transactions_with_wallet_context_and_budget(
-    context: &mut WalletContext,
-    max_txn_num: usize,
-    gas_budget: u64,
-) -> Vec<VerifiedTransaction> {
-    let recipient = get_key_pair::<AuthorityKeyPair>().0;
-    let accounts_and_objs = get_account_and_gas_objects(context).await;
-    let mut res = Vec::with_capacity(max_txn_num);
-    let client = context.get_client().await.unwrap();
-    let gas_price = client
-        .governance_api()
-        .get_reference_gas_price()
-        .await
-        .unwrap();
+    let gas_price = context.get_reference_gas_price().await.unwrap();
     for (address, objs) in &accounts_and_objs {
         for obj in objs {
             if res.len() >= max_txn_num {
@@ -202,7 +165,7 @@ pub async fn make_transactions_with_wallet_context_and_budget(
                     .into_object()
                     .expect("Gas coin could not be converted to object ref.")
                     .object_ref(),
-                gas_budget,
+                gas_price * GAS_UNIT_FOR_TRANSFER,
                 gas_price,
             );
             let tx = to_sender_signed_transaction(
@@ -214,6 +177,47 @@ pub async fn make_transactions_with_wallet_context_and_budget(
     }
     res
 }
+
+// // FIXME remove this
+// pub async fn make_transactions_with_wallet_context_and_budget(
+//     context: &mut WalletContext,
+//     max_txn_num: usize,
+//     gas_budget: u64,
+// ) -> Vec<VerifiedTransaction> {
+//     let recipient = get_key_pair::<AuthorityKeyPair>().0;
+//     let accounts_and_objs = get_account_and_gas_objects(context).await;
+//     let mut res = Vec::with_capacity(max_txn_num);
+//     let client = context.get_client().await.unwrap();
+//     let gas_price = client
+//         .governance_api()
+//         .get_reference_gas_price()
+//         .await
+//         .unwrap();
+//     for (address, objs) in &accounts_and_objs {
+//         for obj in objs {
+//             if res.len() >= max_txn_num {
+//                 return res;
+//             }
+//             let data = TransactionData::new_transfer_sui(
+//                 recipient,
+//                 *address,
+//                 Some(2),
+//                 obj.clone()
+//                     .into_object()
+//                     .expect("Gas coin could not be converted to object ref.")
+//                     .object_ref(),
+//                 gas_budget,
+//                 gas_price,
+//             );
+//             let tx = to_sender_signed_transaction(
+//                 data,
+//                 context.config.keystore.get_key(address).unwrap(),
+//             );
+//             res.push(tx);
+//         }
+//     }
+//     res
+// }
 
 pub async fn make_counter_increment_transaction_with_wallet_context(
     context: &WalletContext,
@@ -228,7 +232,8 @@ pub async fn make_counter_increment_transaction_with_wallet_context(
             .await
             .unwrap(),
     };
-    let data = TransactionData::new_move_call_with_dummy_gas_price(
+    let rgp = context.get_reference_gas_price().await.unwrap();
+    let data = TransactionData::new_move_call(
         sender,
         SUI_FRAMEWORK_OBJECT_ID,
         "counter".parse().unwrap(),
@@ -240,59 +245,21 @@ pub async fn make_counter_increment_transaction_with_wallet_context(
             initial_shared_version: counter_initial_shared_version,
             mutable: true,
         })],
-        MAX_GAS,
+        rgp * GAS_UNIT_FOR_GENERIC,
+        rgp,
     )
     .unwrap();
     to_sender_signed_transaction(data, context.config.keystore.get_key(&sender).unwrap())
-}
-
-/// Make a few different single-writer test transactions owned by specific addresses.
-pub fn make_transactions_with_pre_genesis_objects(
-    keys: Keystore,
-) -> (Vec<VerifiedTransaction>, Vec<Object>) {
-    // The key pair of the recipient of the transaction.
-    let recipient = get_key_pair::<AuthorityKeyPair>().0;
-
-    // The gas objects and the objects used in the transfer transactions. Evert two
-    // consecutive objects must have the same owner for the transaction to be valid.
-    let mut addresses_two_by_two = Vec::new();
-    for address in keys.addresses() {
-        addresses_two_by_two.push(address);
-        addresses_two_by_two.push(address);
-    }
-    let gas_objects = generate_test_gas_objects_with_owner_list(addresses_two_by_two);
-
-    // Make one transaction for every two gas objects.
-    let mut transactions = Vec::new();
-    for objects in gas_objects.chunks(2) {
-        let [o1, o2]: &[Object; 2] = match objects.try_into() {
-            Ok(x) => x,
-            Err(_) => break,
-        };
-
-        // Here we assume the object is owned not shared, so it is safe to unwrap.
-        let sender = o1.owner.get_owner_address().unwrap();
-        let data = TransactionData::new_transfer_with_dummy_gas_price(
-            recipient,
-            o1.compute_object_reference(),
-            /* sender */ sender,
-            /* gas_object_ref */ o2.compute_object_reference(),
-            MAX_GAS,
-        );
-        let tx = to_sender_signed_transaction(data, keys.get_key(&sender).unwrap());
-        transactions.push(tx);
-    }
-    (transactions, gas_objects)
 }
 
 /// Make a few different test transaction containing the same shared object.
 pub fn test_shared_object_transactions(
     shared_object: Option<Object>,
     gas_objects: Option<Vec<Object>>,
+    gas_price: u64,
 ) -> Vec<VerifiedTransaction> {
     // The key pair of the sender of the transaction.
     let (sender, keypair) = deterministic_random_account_key();
-
     // Make one transaction per gas object (all containing the same shared object).
     let mut transactions = Vec::new();
     let shared_object = shared_object.unwrap_or_else(Object::shared_for_testing);
@@ -303,7 +270,7 @@ pub fn test_shared_object_transactions(
     let function = "create";
 
     for gas_object in gas_objects {
-        let data = TransactionData::new_move_call_with_dummy_gas_price(
+        let data = TransactionData::new_move_call(
             sender,
             SUI_FRAMEWORK_OBJECT_ID,
             ident_str!(module).to_owned(),
@@ -320,7 +287,8 @@ pub fn test_shared_object_transactions(
                 CallArg::Pure(16u64.to_le_bytes().to_vec()),
                 CallArg::Pure(bcs::to_bytes(&AccountAddress::from(sender)).unwrap()),
             ],
-            MAX_GAS,
+            gas_price * GAS_UNIT_FOR_GENERIC,
+            gas_price,
         )
         .unwrap();
         transactions.push(to_sender_signed_transaction(data, &keypair));
@@ -334,27 +302,28 @@ pub fn create_publish_move_package_transaction(
     path: PathBuf,
     sender: SuiAddress,
     keypair: &AccountKeyPair,
-    gas_price: Option<u64>,
-) -> VerifiedTransaction {
-    create_publish_move_package_transaction_with_budget(
-        gas_object_ref,
-        path,
-        sender,
-        keypair,
-        gas_price,
-        MAX_GAS,
-    )
-}
-
-/// Make a transaction to publish a test move contracts package with gas budget specified.
-pub fn create_publish_move_package_transaction_with_budget(
-    gas_object_ref: ObjectRef,
-    path: PathBuf,
-    sender: SuiAddress,
-    keypair: &AccountKeyPair,
-    gas_price: Option<u64>,
     gas_budget: u64,
+    gas_price: u64,
 ) -> VerifiedTransaction {
+    //     create_publish_move_package_transaction_with_budget(
+    //         gas_object_ref,
+    //         path,
+    //         sender,
+    //         keypair,
+    //         gas_unit,
+    //         gas_price,
+    //     )
+    // }
+
+    // /// Make a transaction to publish a test move contracts package with gas budget specified.
+    // pub fn create_publish_move_package_transaction_with_budget(
+    //     gas_object_ref: ObjectRef,
+    //     path: PathBuf,
+    //     sender: SuiAddress,
+    //     keypair: &AccountKeyPair,
+    //     gas_unit: u64,
+    //     gas_price: u64,
+    // ) -> VerifiedTransaction {
     let build_config = BuildConfig::new_for_testing();
     let compiled_package = sui_framework::build_move_package(&path, build_config).unwrap();
     let all_module_bytes =
@@ -367,7 +336,7 @@ pub fn create_publish_move_package_transaction_with_budget(
         all_module_bytes,
         dependencies,
         gas_budget,
-        gas_price.unwrap_or(DUMMY_GAS_PRICE),
+        gas_price,
     );
     to_sender_signed_transaction(data, keypair)
 }
@@ -378,9 +347,15 @@ pub fn make_transfer_object_transaction_with_wallet_context(
     context: &WalletContext,
     sender: SuiAddress,
     recipient: SuiAddress,
+    gas_price: u64,
 ) -> VerifiedTransaction {
-    let data = TransactionData::new_transfer_with_dummy_gas_price(
-        recipient, object_ref, sender, gas_object, MAX_GAS,
+    let data = TransactionData::new_transfer(
+        recipient,
+        object_ref,
+        sender,
+        gas_object,
+        GAS_UNIT_FOR_TRANSFER * gas_price,
+        gas_price,
     );
     to_sender_signed_transaction(data, context.config.keystore.get_key(&sender).unwrap())
 }
@@ -390,7 +365,7 @@ pub fn make_counter_create_transaction(
     package_id: ObjectID,
     sender: SuiAddress,
     keypair: &AccountKeyPair,
-    gas_price: Option<u64>,
+    gas_price: u64,
 ) -> VerifiedTransaction {
     let data = TransactionData::new_move_call(
         sender,
@@ -400,8 +375,8 @@ pub fn make_counter_create_transaction(
         Vec::new(),
         gas_object,
         vec![],
-        MAX_GAS,
-        gas_price.unwrap_or(DUMMY_GAS_PRICE),
+        10_000,
+        gas_price,
     )
     .unwrap();
     to_sender_signed_transaction(data, keypair)
@@ -473,8 +448,19 @@ pub fn move_transaction(
     function: &'static str,
     package_id: ObjectID,
     arguments: Vec<CallArg>,
+    gas_budget: u64,
+    gas_price: u64,
 ) -> VerifiedTransaction {
-    move_transaction_with_type_tags(gas_object, module, function, package_id, &[], arguments)
+    move_transaction_with_type_tags(
+        gas_object,
+        module,
+        function,
+        package_id,
+        &[],
+        arguments,
+        gas_budget,
+        gas_price,
+    )
 }
 
 /// Make a transaction calling a specific move module & function, with specific type tags
@@ -485,11 +471,13 @@ pub fn move_transaction_with_type_tags(
     package_id: ObjectID,
     type_args: &[TypeTag],
     arguments: Vec<CallArg>,
+    gas_budget: u64,
+    gas_price: u64,
 ) -> VerifiedTransaction {
     let (sender, keypair) = deterministic_random_account_key();
 
     // Make the transaction.
-    let data = TransactionData::new_move_call_with_dummy_gas_price(
+    let data = TransactionData::new_move_call(
         sender,
         package_id,
         ident_str!(module).to_owned(),
@@ -497,7 +485,8 @@ pub fn move_transaction_with_type_tags(
         type_args.to_vec(),
         gas_object.compute_object_reference(),
         arguments,
-        MAX_GAS,
+        gas_budget,
+        gas_price,
     )
     .unwrap();
     to_sender_signed_transaction(data, &keypair)
